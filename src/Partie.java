@@ -3,7 +3,7 @@ import java.io.IOException;
 
 public class Partie {
 
-    private final int[][] grille = new int[7][6];
+    private final int[][] grille = new int[7][6];  // Grille de 7 colonnes et 6 lignes
     private ClientHandler joueur1;
     private ClientHandler joueur2;
     private int tour;
@@ -11,9 +11,10 @@ public class Partie {
     public Partie(ClientHandler joueur1, ClientHandler joueur2) {
         this.joueur1 = joueur1;
         this.joueur2 = joueur2;
-        this.tour = 0;
+        this.tour = 0;  // Joueur 1 commence
     }
 
+    // Gérer le coup joué par un joueur
     public synchronized boolean jouer(int colonne, ClientHandler joueur) throws IOException {
         if (!estTourValide(joueur)) {
             return false;
@@ -25,6 +26,7 @@ public class Partie {
             return false;
         }
 
+        // Placer le jeton dans la colonne
         grille[colonne - 1][ligne] = (tour % 2 == 0) ? 1 : 2;
         envoyerGrille();
 
@@ -33,12 +35,13 @@ public class Partie {
             return true;
         }
 
-        if (tour >= 42) {
+        if (tour >= 42) {  // Égalité
             envoyerMessage(joueur1, "Égalité !");
             envoyerMessage(joueur2, "Égalité !");
             return true;
         }
 
+        // Passer au tour suivant
         tour++;
         return false;
     }
@@ -53,14 +56,14 @@ public class Partie {
 
     private void envoyerGrille() throws IOException {
         StringBuilder sb = new StringBuilder();
-        for (int j = 5; j >= 0; j--) {
+        for (int j = 5; j >= 0; j--) {  // Lignes de bas en haut
             for (int i = 0; i < 7; i++) {
-                sb.append(grille[i][j]);
+                sb.append(grille[i][j]);  // Valeur dans chaque case (0, 1, ou 2)
                 if (i < 6) {
-                    sb.append(",");
+                    sb.append(",");  // Séparateur entre les cases d'une ligne
                 }
             }
-            sb.append(";");
+            sb.append(";");  // Séparateur entre les lignes
         }
         String grilleStr = "grille:" + sb.toString();
         envoyerMessage(joueur1, grilleStr);
@@ -75,17 +78,20 @@ public class Partie {
         envoyerMessage(joueur, "Vous avez gagné !");
         ClientHandler adversaire = (joueur == joueur1) ? joueur2 : joueur1;
         envoyerMessage(adversaire, "Vous avez perdu !");
+        ServeurPuissance4.incrementerScore(joueur.getNomJoueur());
     }
 
+    // Fonction pour sélectionner la ligne où le jeton doit être placé
     private int selectionHauteur(int[][] grille, int colonne) {
         for (int i = 0; i < 6; i++) {
             if (grille[colonne - 1][i] == 0) {
-                return i;
+                return i;  // Retourner la première ligne vide
             }
         }
-        return -1;
+        return -1;  // Si la colonne est pleine, retourner -1
     }
 
+    // Fonction pour vérifier la victoire d'un joueur
     private boolean verifierVictoire(int[][] grille, int jeton) {
         return verifierVictoireHorizontale(grille, jeton) || verifierVictoireVerticale(grille, jeton)
                 || verifierVictoireDiagonale(grille, jeton);
@@ -114,6 +120,7 @@ public class Partie {
     }
 
     private boolean verifierVictoireDiagonale(int[][] grille, int jeton) {
+        // Vérification diagonale (gauche à droite)
         for (int i = 0; i < 4; i++) {
             for (int j = 0; j < 3; j++) {
                 if (grille[i][j] == jeton && grille[i + 1][j + 1] == jeton && grille[i + 2][j + 2] == jeton && grille[i + 3][j + 3] == jeton) {
@@ -122,6 +129,7 @@ public class Partie {
             }
         }
 
+        // Vérification diagonale (droite à gauche)
         for (int i = 3; i < 7; i++) {
             for (int j = 0; j < 3; j++) {
                 if (grille[i][j] == jeton && grille[i - 1][j + 1] == jeton && grille[i - 2][j + 2] == jeton && grille[i - 3][j + 3] == jeton) {
@@ -130,7 +138,7 @@ public class Partie {
             }
         }
 
-        return false;
+        return false;  // Pas de victoire
     }
 
     // Gérer la déconnexion d'un joueur
@@ -150,6 +158,7 @@ public class Partie {
         }
     }
 
+    // Méthodes pour obtenir les joueurs de la partie
     public ClientHandler getJoueur1() {
         return joueur1;
     }

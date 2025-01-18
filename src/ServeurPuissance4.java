@@ -4,6 +4,8 @@ import java.net.*;
 import java.util.*;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+import javax.swing.*;
+import javax.swing.table.DefaultTableModel;
 
 public class ServeurPuissance4 {
 
@@ -14,8 +16,16 @@ public class ServeurPuissance4 {
     private static List<Partie> partiesEnCours = new ArrayList<>();
     private static Lock lock = new ReentrantLock();
 
+    // Variables pour l'interface graphique
+    private static JFrame frame;
+    private static DefaultListModel<String> waitingListModel;
+    private static DefaultTableModel gamesTableModel;
+
     public static void main(String[] args) throws IOException {
         loadScores();  // Charger les scores depuis un fichier
+
+        // Démarrer l'interface graphique
+        createGUI();
 
         ServerSocket serverSocket = new ServerSocket(PORT);
         System.out.println("Serveur Puissance 4 démarré sur le port " + PORT);
@@ -23,6 +33,7 @@ public class ServeurPuissance4 {
         // Boucle principale du serveur
         new Thread(() -> {
             while (true) {
+                updateInterface();  // Met à jour l'interface régulièrement pour détecter les déconnexions
                 try {
                     Thread.sleep(1000);  // Vérification toutes les 1 seconde
                 } catch (InterruptedException e) {
@@ -36,6 +47,41 @@ public class ServeurPuissance4 {
             ClientHandler clientHandler = new ClientHandler(clientSocket);
             new Thread(clientHandler).start();
         }
+    }
+
+    public static synchronized void joueurVeutRejouer(ClientHandler joueur) {
+        joueursRejouant.add(joueur);
+        if (joueursRejouant.size() == 2) { // Deux joueurs prêts à rejouer
+            Partie nouvellePartie = new Partie(joueursRejouant.get(0), joueursRejouant.get(1));
+            joueursRejouant.get(0).setPartie(nouvellePartie);
+            joueursRejouant.get(1).setPartie(nouvellePartie);
+            joueursRejouant.clear(); // Réinitialiser la liste pour la prochaine partie
+        }
+    }
+
+    private static void createGUI() {
+        frame = new JFrame("Serveur Puissance 4");
+        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        frame.setSize(600, 400);
+        frame.setLayout(new BoxLayout(frame.getContentPane(), BoxLayout.Y_AXIS));
+
+        // Liste des joueurs en attente
+        waitingListModel = new DefaultListModel<>();
+        JList<String> waitingList = new JList<>(waitingListModel);
+        JScrollPane waitingScrollPane = new JScrollPane(waitingList);
+        waitingScrollPane.setBorder(BorderFactory.createTitledBorder("Joueurs en attente"));
+        frame.add(waitingScrollPane);
+
+        // Tableau des parties en cours
+        String[] columnNames = {"Joueur 1", "Joueur 2"};
+        gamesTableModel = new DefaultTableModel(columnNames, 0);
+        JTable gamesTable = new JTable(gamesTableModel);
+        JScrollPane gamesScrollPane = new JScrollPane(gamesTable);
+        gamesScrollPane.setBorder(BorderFactory.createTitledBorder("Parties en cours"));
+        frame.add(gamesScrollPane);
+
+        // Afficher la fenêtre
+        frame.setVisible(true);
     }
 
     private static void loadScores() {
@@ -61,10 +107,13 @@ public class ServeurPuissance4 {
         }
     }
 
+    // Méthode pour renvoyer un joueur au lobby
     public static void retournerAuLobby(ClientHandler joueur) {
         // Ajouter le joueur à la liste des joueurs en attente
         joueursEnAttente.add(joueur);
+
         joueur.getWriter().println("Vous êtes de retour au lobby.");
+
     }
 
     public static synchronized void ajouterJoueur(ClientHandler joueur) {
@@ -72,6 +121,7 @@ public class ServeurPuissance4 {
         try {
             if (!joueursEnAttente.contains(joueur)) {
                 joueursEnAttente.add(joueur);
+                waitingListModel.addElement(joueur.getNomJoueur());
             }
 
             if (joueursEnAttente.size() >= 2) {
@@ -85,6 +135,10 @@ public class ServeurPuissance4 {
 
                 joueur1.getWriter().println("Vous jouez contre " + joueur2.getNomJoueur());
                 joueur2.getWriter().println("Vous jouez contre " + joueur1.getNomJoueur());
+
+                waitingListModel.removeElement(joueur1.getNomJoueur());
+                waitingListModel.removeElement(joueur2.getNomJoueur());
+                gamesTableModel.addRow(new Object[]{joueur1.getNomJoueur(), joueur2.getNomJoueur()});
             }
         } finally {
             lock.unlock();
@@ -94,12 +148,15 @@ public class ServeurPuissance4 {
     public static synchronized void retirerJoueur(ClientHandler joueur) {
         lock.lock();
         try {
-            joueursEnAttente.remove(joueur);
+            if (joueursEnAttente.remove(joueur)) {
+                waitingListModel.removeElement(joueur.getNomJoueur());
+            }
         } finally {
             lock.unlock();
         }
     }
 
+    // Nouvelle méthode pour lancer une partie
     public static synchronized void lancerPartie(ClientHandler joueur) {
         lock.lock();
         try {
@@ -127,6 +184,12 @@ public class ServeurPuissance4 {
                     adversaire.setPartie(partie);
                     partiesEnCours.add(partie);
 
+                    // Mise à jour de l'interface graphique
+                    waitingListModel.removeElement(joueur.getNomJoueur());
+                    waitingListModel.removeElement(adversaire.getNomJoueur());
+                    gamesTableModel.addRow(new Object[]{joueur.getNomJoueur(), adversaire.getNomJoueur()});
+
+                    // Informer les joueurs
                     joueur.getWriter().println("Vous jouez contre " + adversaire.getNomJoueur() + " !");
                     adversaire.getWriter().println("Vous jouez contre " + joueur.getNomJoueur() + " !");
                 } else {
@@ -145,10 +208,51 @@ public class ServeurPuissance4 {
         saveScores();
     }
 
+    // Met à jour l'interface pour vérifier les déconnexions
+    private static void updateInterface() {
+        lock.lock();
+        try {
+            // Vérifier les déconnexions des joueurs en attente
+            List<ClientHandler> joueursAEnlever = new ArrayList<>();
+            for (ClientHandler joueur : joueursEnAttente) {
+                if (!joueur.isConnected()) {
+                    joueursAEnlever.add(joueur);
+                }
+            }
+            for (ClientHandler joueur : joueursAEnlever) {
+                joueursEnAttente.remove(joueur);
+                waitingListModel.removeElement(joueur.getNomJoueur());
+            }
+
+            // Vérifier les déconnexions dans les parties en cours
+            List<Partie> partiesAEnlever = new ArrayList<>();
+            for (Partie partie : partiesEnCours) {
+                if (!partie.getJoueur1().isConnected() || !partie.getJoueur2().isConnected()) {
+                    partiesAEnlever.add(partie);
+                }
+            }
+            for (Partie partie : partiesAEnlever) {
+                retirerPartie(partie);
+            }
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    // Méthode pour retirer une partie de la liste des parties en cours
     public static synchronized void retirerPartie(Partie partie) {
         lock.lock();
         try {
             partiesEnCours.remove(partie);
+
+            // Rechercher la ligne correspondante dans le tableau et la supprimer
+            for (int i = 0; i < gamesTableModel.getRowCount(); i++) {
+                if (gamesTableModel.getValueAt(i, 0).equals(partie.getJoueur1().getNomJoueur())
+                        && gamesTableModel.getValueAt(i, 1).equals(partie.getJoueur2().getNomJoueur())) {
+                    gamesTableModel.removeRow(i);
+                    break;
+                }
+            }
         } finally {
             lock.unlock();
         }
