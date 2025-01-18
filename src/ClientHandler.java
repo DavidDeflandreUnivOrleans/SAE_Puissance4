@@ -21,22 +21,29 @@ public class ClientHandler implements Runnable {
             in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
             out = new PrintWriter(socket.getOutputStream(), true);
 
+            // Connexion du joueur
             nomJoueur = in.readLine();
             System.out.println("Nom reçu du joueur : " + nomJoueur);
 
+            // Ajouter le joueur à la liste des joueurs en attente
             ServeurPuissance4.ajouterJoueur(this);
             out.println("Bienvenue " + nomJoueur + ", en attente d'un adversaire...");
 
+            // Attendre un adversaire
             while (partie == null && isConnected) {
                 Thread.sleep(1000);
             }
 
+            // Démarrage du jeu
             if (isConnected) {
                 startGame();
             }
 
         } catch (IOException | InterruptedException e) {
             System.out.println(nomJoueur + " s'est déconnecté.");
+            if (partie != null) {
+                partie.joueurDeconnecte(this);  // Gérer la déconnexion et déclarer un gagnant
+            }
         } finally {
             closeConnection();
         }
@@ -54,15 +61,17 @@ public class ClientHandler implements Runnable {
         return out;
     }
 
+    // Nouvelle méthode pour obtenir la socket
     public Socket getSocket() {
         return socket;
     }
 
+    // Méthode pour obtenir la partie associée à ce joueur
     public Partie getPartie() {
         return partie;
     }
 
-    
+    // Méthode pour obtenir le nom du joueur
     public String getJoueur() {
         return nomJoueur;
     }
@@ -72,11 +81,13 @@ public class ClientHandler implements Runnable {
         boolean partieTerminee = false;
         try {
             while (!partieTerminee && isConnected) {
+                // Lire la colonne choisie par le joueur
                 out.println("Choisissez une colonne (1 à 7) :");
                 message = in.readLine();
 
                 if (message == null) {
                     out.println("Déconnexion détectée. L'adversaire a gagné.");
+                    partie.joueurDeconnecte(this);
                     return;
                 }
                 try {
@@ -89,6 +100,7 @@ public class ClientHandler implements Runnable {
         } catch (IOException e) {
             if (isConnected) {
                 out.println("Une erreur de connexion s'est produite. L'adversaire a gagné.");
+                partie.joueurDeconnecte(this);
             }
         } finally {
             out.println("Fin de la partie. Vous allez être déconnecté.");
@@ -99,6 +111,7 @@ public class ClientHandler implements Runnable {
         return !socket.isClosed() && socket.isConnected();
     }
 
+    // Fermer la connexion proprement
     private void closeConnection() {
         try {
             isConnected = false;

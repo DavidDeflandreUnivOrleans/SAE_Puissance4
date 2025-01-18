@@ -133,6 +133,23 @@ public class Partie {
         return false;
     }
 
+    // Gérer la déconnexion d'un joueur
+    public void joueurDeconnecte(ClientHandler joueurDeconnecte) {
+        ClientHandler autreJoueur = (joueurDeconnecte == joueur1) ? joueur2 : joueur1;
+
+        // Informer l'autre joueur que son adversaire est déconnecté
+        try {
+            envoyerMessage(autreJoueur, joueurDeconnecte.getNomJoueur() + " s'est déconnecté. Vous avez gagné !");
+            ServeurPuissance4.incrementerScore(autreJoueur.getNomJoueur());
+            autreJoueur.getWriter().println("Vous allez être déconnecté.");
+            autreJoueur.getWriter().flush();
+            autreJoueur.getWriter().close();
+            autreJoueur.getSocket().close();  // Fermer la socket de l'autre joueur
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
     public ClientHandler getJoueur1() {
         return joueur1;
     }

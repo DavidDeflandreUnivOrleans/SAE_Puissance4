@@ -15,13 +15,16 @@ public class ServeurPuissance4 {
     private static Lock lock = new ReentrantLock();
 
     public static void main(String[] args) throws IOException {
+        loadScores();  // Charger les scores depuis un fichier
+
         ServerSocket serverSocket = new ServerSocket(PORT);
         System.out.println("Serveur Puissance 4 démarré sur le port " + PORT);
 
+        // Boucle principale du serveur
         new Thread(() -> {
             while (true) {
                 try {
-                    Thread.sleep(1000);
+                    Thread.sleep(1000);  // Vérification toutes les 1 seconde
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 }
@@ -35,7 +38,31 @@ public class ServeurPuissance4 {
         }
     }
 
+    private static void loadScores() {
+        try (BufferedReader br = new BufferedReader(new FileReader("scores.txt"))) {
+            String line;
+            while ((line = br.readLine()) != null) {
+                String[] parts = line.split(":");
+                scores.put(parts[0], Integer.parseInt(parts[1]));
+            }
+        } catch (IOException e) {
+            System.out.println("Aucun score persistant trouvé.");
+        }
+    }
+
+    public static synchronized void saveScores() {
+        try (BufferedWriter bw = new BufferedWriter(new FileWriter("scores.txt"))) {
+            for (Map.Entry<String, Integer> entry : scores.entrySet()) {
+                bw.write(entry.getKey() + ":" + entry.getValue());
+                bw.newLine();
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
     public static void retournerAuLobby(ClientHandler joueur) {
+        // Ajouter le joueur à la liste des joueurs en attente
         joueursEnAttente.add(joueur);
         joueur.getWriter().println("Vous êtes de retour au lobby.");
     }
@@ -111,6 +138,11 @@ public class ServeurPuissance4 {
         } finally {
             lock.unlock();
         }
+    }
+
+    public static synchronized void incrementerScore(String nomJoueur) {
+        scores.put(nomJoueur, scores.getOrDefault(nomJoueur, 0) + 1);
+        saveScores();
     }
 
     public static synchronized void retirerPartie(Partie partie) {
